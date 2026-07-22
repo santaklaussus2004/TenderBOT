@@ -608,6 +608,86 @@ async def send_tenders_to_chat(
             )
 
 
+def format_compact_tender(
+    tender: dict[str, Any],
+    index: int,
+    total: int,
+) -> str:
+    """Краткий вывод тендера для команд /today, /before и /past."""
+    lines = [
+        f"📢 ТЕНДЕР {index} ИЗ {total}",
+        f"URL тендера: {value_or_default(tender.get('url'))}",
+    ]
+
+    winners = tender.get("winners")
+    valid_winners = (
+        [winner for winner in winners if isinstance(winner, dict)]
+        if isinstance(winners, list)
+        else []
+    )
+
+    if not valid_winners:
+        lines.extend(
+            [
+                "",
+                "Победитель: не найден",
+                "Телефон победителя: Не указано",
+                "Email победителя: Не указано",
+                "Message: Не указано",
+            ]
+        )
+        return "\n".join(lines)
+
+    for winner_index, winner in enumerate(valid_winners, start=1):
+        if len(valid_winners) > 1:
+            lines.extend(
+                [
+                    "",
+                    f"🏆 ПОБЕДИТЕЛЬ {winner_index} ИЗ {len(valid_winners)}",
+                ]
+            )
+        else:
+            lines.append("")
+
+        lines.extend(
+            [
+                f"Телефон победителя: {value_or_default(winner.get('phone_number'))}",
+                f"Email победителя: {value_or_default(winner.get('email'))}",
+                "Message:",
+                value_or_default(winner.get("message")),
+            ]
+        )
+
+    return "\n".join(lines)
+
+
+async def send_compact_tenders_to_chat(
+    bot: Bot,
+    chat_id: int,
+    tenders: list[dict[str, Any]],
+    date_text: str,
+    heading: str,
+) -> None:
+    await send_long_chat_message(
+        bot,
+        chat_id,
+        f"{heading}\n"
+        f"📅 Дата: {date_text}\n"
+        f"Найдено объявлений: {len(tenders)}",
+    )
+
+    for tender_index, tender in enumerate(tenders, start=1):
+        await send_long_chat_message(
+            bot,
+            chat_id,
+            format_compact_tender(
+                tender,
+                tender_index,
+                len(tenders),
+            ),
+        )
+
+
 async def start_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -709,7 +789,7 @@ async def today_command(
         save_check_state(date_text, tenders)
         return
 
-    await send_tenders_to_chat(
+    await send_compact_tenders_to_chat(
         context.bot,
         chat.id,
         tenders,
@@ -742,7 +822,7 @@ async def past_command(
     if not json_path.exists():
         await send_long_message(
             update,
-            "Файл с тендерами за последние полгода(21.01.2026) не найден.\n\n"
+            "Файл с тендерами за последние полгода 21.01.2026 не найден.\n\n"
             f"Ожидаемый файл: {json_path.resolve()}",
         )
         return
@@ -778,13 +858,13 @@ async def past_command(
     if not tenders:
         await send_long_message(
             update,
-            "В файле за последние полгода(21.01.2026) тендеры не найдены.",
+            "В файле за последние полгода 21.01.2026 тендеры не найдены.",
         )
         return
 
     date_text = json_path.stem.removesuffix("past")
 
-    await send_tenders_to_chat(
+    await send_compact_tenders_to_chat(
         context.bot,
         chat.id,
         tenders,
@@ -794,7 +874,7 @@ async def past_command(
 
     await send_long_message(
         update,
-        "✅ Все тендеры из файла за последние полгода(21.01.2026) отправлены.",
+        "✅ Все тендеры из файла за последние полгода 21.01.2026 отправлены.",
     )
 
 
@@ -853,7 +933,7 @@ async def before_command(
 
         date_text = file_date.strftime("%d.%m.%Y")
 
-        await send_tenders_to_chat(
+        await send_compact_tenders_to_chat(
             context.bot,
             chat.id,
             tenders,
@@ -1077,7 +1157,7 @@ async def error_handler(
 def main() -> None:
     load_dotenv()
 
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    token = os.getenv("TELEGRAM_BOT_TOKEN_easy", "").strip()
 
     if not token:
         raise RuntimeError(
